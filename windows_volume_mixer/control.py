@@ -1,29 +1,16 @@
-from typing import Annotated
-
 from pycaw.pycaw import AudioUtilities, ISimpleAudioVolume, AudioSession
-from pydantic import BaseModel, Field
+
+from windows_volume_mixer.volume import Volume
 
 
-class Volume(BaseModel):
-    value: Annotated[float, Field(ge=0, le=1)]
-
-    @property
-    def percentage(self) -> float:
-        return self.value*100
-
-    @classmethod
-    def from_percentage(cls, percentage:float):
-        return cls(value=percentage/100)
-
-
-def get_volume(session: AudioSession) -> float:
+def get_volume(session: AudioSession) -> Volume:
     volume_iface = session._ctl.QueryInterface(ISimpleAudioVolume)
-    return volume_iface.GetMasterVolume()
+    return Volume(value=volume_iface.GetMasterVolume())
 
 
-def set_volume(session: AudioSession, value: float) -> None:
+def set_volume(session: AudioSession, volume: Volume) -> None:
     volume_iface = session._ctl.QueryInterface(ISimpleAudioVolume)
-    volume_iface.SetMasterVolume(value, None)
+    volume_iface.SetMasterVolume(volume.value, None)
 
 
 def get_session_from_keyword(keyword: str) -> AudioSession:

@@ -13,7 +13,7 @@ setup(
     url='https://github.com/moqba/windows_volume_mixer',
     license='MIT',
     packages=find_packages(include=['windows_volume_mixer', 'windows_volume_mixer.*']),
-    install_requires=['pycaw', 'fastapi', 'pydantic', 'uvicorn', 'screeninfo', 'pefile', 'pillow'],
+    install_requires=['pycaw', 'fastapi', 'pydantic', 'uvicorn', 'screeninfo', 'pefile', 'pillow', 'pywin32'],
     extras_require={
         'dev': ['pytest',]
     },

@@ -1,4 +1,6 @@
 from pathlib import Path
+
+import win32con
 from PIL import Image
 import win32gui
 import win32ui
@@ -6,18 +8,29 @@ from pycaw.pycaw import AudioSession
 
 
 def save_icon_from_session(session: AudioSession, dir: Path):
-    exe_path = session.Process.exe()
-    large, _ = win32gui.ExtractIconEx(exe_path, 0)
+    exe_path = Path(session.Process.exe())
+    exe_name = exe_path.stem
+    large, _ = win32gui.ExtractIconEx(str(exe_path), 0)
     if not large:
         return
     hicon = large[0]
     hdc = win32ui.CreateDCFromHandle(win32gui.GetDC(0))
     hbmp = win32ui.CreateBitmap()
-    hbmp.CreateCompatibleBitmap(hdc, 256, 256)
+    hbmp.CreateCompatibleBitmap(hdc, 56, 56)
 
-    memdc=hdc.CreateCompatibleDc()
+    memdc=hdc.CreateCompatibleDC()
     memdc.SelectObject(hbmp)
-    memdc.DrawIcon((0,0), hicon)
+    win32gui.DrawIconEx(
+        memdc.GetSafeHdc(),
+        0,
+        0,
+        hicon,
+        56,
+        56,
+        0,
+        None,
+        win32con.DI_NORMAL,
+    )
 
     bmpinfo = hbmp.GetInfo()
     bmpstr = hbmp.GetBitmapBits(True)
@@ -31,4 +44,4 @@ def save_icon_from_session(session: AudioSession, dir: Path):
         1,
     )
 
-    img.save(dir / "new_image.png")
+    img.save(dir / f"{exe_name}.png")
