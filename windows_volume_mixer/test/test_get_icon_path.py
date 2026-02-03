@@ -13,8 +13,8 @@ def icon_dir() -> Path:
 
 
 def test_save_icon_from_session(icon_dir: Path, spotify_audio_session: AudioSession):
-    save_icon_from_session(session=spotify_audio_session, dir=icon_dir)
+    save_icon_from_session(session=spotify_audio_session, output_dir=icon_dir)
 
 
 def test_save_icon_from_session_discord(icon_dir: Path, discord_audio_session: AudioSession):
-    save_icon_from_session(session=discord_audio_session, dir=icon_dir)
+    save_icon_from_session(session=discord_audio_session, output_dir=icon_dir)

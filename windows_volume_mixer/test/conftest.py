@@ -9,10 +9,10 @@ SAMPLE_APP: Final[str] = "spotify"
 
 
 @fixture
-def spotify_audio_session() -> AudioSession:
+def spotify_audio_session() -> list[AudioSession]:
     return get_session_from_keyword("spotify")
 
 
 @fixture
-def discord_audio_session() -> AudioSession:
+def discord_audio_session() -> list[AudioSession]:
     return get_session_from_keyword("discord")
