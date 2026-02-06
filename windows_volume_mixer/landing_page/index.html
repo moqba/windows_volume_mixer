@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Volume Mixer</title>
+
+    <style>
+        body {
+            font-family: sans-serif;
+            background: #121212;
+            color: white;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            margin: 0;
+        }
+
+        .mixer-container {
+            display: flex;
+            gap: 40px;
+        }
+
+        .channel {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            width: 80px;
+            transition: opacity 0.3s ease;
+        }
+
+        /* Inactive (app unavailable) */
+        .channel.inactive {
+            opacity: 0.35;
+        }
+
+        .channel.inactive input[type=range] {
+            pointer-events: none;
+        }
+
+        .channel.inactive .value-display {
+            color: #777;
+        }
+
+        /* Vertical slider */
+        input[type=range] {
+            writing-mode: bt-lr; /* IE */
+            appearance: slider-vertical;
+            width: 8px;
+            height: 200px;
+            padding: 0 5px;
+            cursor: pointer;
+        }
+
+        input[type=range]:disabled {
+            cursor: not-allowed;
+        }
+
+        .label {
+            margin-top: 15px;
+            font-weight: bold;
+            text-transform: uppercase;
+            font-size: 12px;
+            letter-spacing: 1px;
+        }
+
+        .value-display {
+            margin-top: 5px;
+            color: #1DB954;
+            font-family: monospace;
+        }
+    </style>
+</head>
+
+<body>
+
+<div class="mixer-container">
+    <div class="channel inactive" id="game-container">
+        <input type="range" id="game-slider" min="0" max="1" step="0.01" disabled>
+        <div class="label">Game</div>
+        <div class="value-display" id="game-val">--</div>
+    </div>
+
+    <div class="channel inactive" id="spotify-container">
+        <input type="range" id="spotify-slider" min="0" max="1" step="0.01" disabled>
+        <div class="label">Spotify</div>
+        <div class="value-display" id="spotify-val">--</div>
+    </div>
+
+    <div class="channel inactive" id="chrome-container">
+        <input type="range" id="chrome-slider" min="0" max="1" step="0.01" disabled>
+        <div class="label">Chrome</div>
+        <div class="value-display" id="chrome-val">--</div>
+    </div>
+
+    <div class="channel inactive" id="discord-container">
+        <input type="range" id="discord-slider" min="0" max="1" step="0.01" disabled>
+        <div class="label">Discord</div>
+        <div class="value-display" id="discord-val">--</div>
+    </div>
+</div>
+
+<script>
+    const apps = ['game', 'spotify', 'chrome', 'discord'];
+
+    apps.forEach(app => {
+        const slider = document.getElementById(`${app}-slider`);
+        const display = document.getElementById(`${app}-val`);
+        const channel = document.getElementById(`${app}-container`);
+
+        let eventSource = null;
+
+        function connectSSE() {
+            eventSource = new EventSource(`http://127.0.0.1:8000/volume/${app}`);
+
+            eventSource.onopen = () => {
+                channel.classList.remove('inactive');
+                slider.disabled = false;
+            };
+
+            eventSource.onmessage = (event) => {
+                const value = parseFloat(event.data);
+                if (!isNaN(value) && document.activeElement !== slider) {
+                    slider.value = value;
+                    display.innerText = value.toFixed(2);
+                }
+            };
+
+            eventSource.onerror = () => {
+                channel.classList.add('inactive');
+                slider.disabled = true;
+                display.innerText = '--';
+
+                eventSource.close();
+
+                // Retry connection
+                setTimeout(connectSSE, 2000);
+            };
+        }
+
+        connectSSE();
+
+        slider.addEventListener('input', () => {
+            const value = parseFloat(slider.value);
+            display.innerText = value.toFixed(2);
+            updateVolume(app, value);
+        });
+    });
+
+    async function updateVolume(app, value) {
+        try {
+            await fetch('http://127.0.0.1:8000/set-volume', {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ app, value })
+            });
+        } catch (err) {
+            console.error('Failed to update volume:', err);
+        }
+    }
+</script>
+
+</body>
+</html>
