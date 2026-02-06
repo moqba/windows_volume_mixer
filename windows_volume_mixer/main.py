@@ -41,6 +41,7 @@ def open_mq_mixer(icon, item):
 
 def quit_app(icon, item):
     icon.stop()
+    server_process.terminate()
     sys.exit(0)
 
 

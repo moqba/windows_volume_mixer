@@ -21,14 +21,14 @@ body {
     gap: 5vw;
     width: 90vw;
     height: 95vh;
-    align-items: stretch; /* stretch channels vertically */
+    align-items: stretch;
 }
 .channel {
     display: flex;
     flex-direction: column;
     align-items: center;
-    transition: opacity 0.3s ease;
     flex: 1;
+    transition: opacity 0.3s ease;
 }
 .channel.inactive {
     opacity: 0.35;
@@ -40,7 +40,7 @@ body {
     color: #777;
 }
 .slider-wrapper {
-    flex-grow: 1; /* fill vertical space */
+    flex-grow: 1;
     display: flex;
     align-items: stretch;
 }
@@ -105,56 +105,95 @@ input[type=range]:disabled {
 </div>
 
 <script>
-const apps = ['game','spotify','chrome','discord'];
+const apps = ['game', 'spotify', 'chrome', 'discord'];
+
 apps.forEach(app => {
     const slider = document.getElementById(`${app}-slider`);
     const display = document.getElementById(`${app}-val`);
     const channel = document.getElementById(`${app}-container`);
+
     let eventSource = null;
+    let connected = false;
+    let reconnectTimer = null;
+
+    function setInactive() {
+        channel.classList.add('inactive');
+        slider.disabled = true;
+        display.innerText = '--';
+        connected = false;
+    }
+
+    function setActive() {
+        channel.classList.remove('inactive');
+        slider.disabled = false;
+        connected = true;
+    }
 
     function connectSSE() {
+        if (eventSource) {
+            eventSource.close();
+            eventSource = null;
+        }
+
         const host = window.location.hostname;
         eventSource = new EventSource(`http://${host}:51000/volume/${app}`);
-        eventSource.onopen = () => {
-            channel.classList.remove('inactive');
-            slider.disabled = false;
-        };
+
         eventSource.onmessage = (event) => {
             const value = parseFloat(event.data);
-            if(!isNaN(value) && document.activeElement !== slider){
+            if (isNaN(value)) return;
+
+            if (!connected) {
+                setActive();
+            }
+
+            if (document.activeElement !== slider) {
                 slider.value = value;
                 display.innerText = value.toFixed(2);
             }
         };
+
         eventSource.onerror = () => {
-            channel.classList.add('inactive');
-            slider.disabled = true;
-            display.innerText = '--';
-            eventSource.close();
-            setTimeout(connectSSE, 2000);
+            if (eventSource) {
+                eventSource.close();
+                eventSource = null;
+            }
+
+            if (connected) {
+                setInactive();
+            }
+
+            if (!reconnectTimer) {
+                reconnectTimer = setTimeout(() => {
+                    reconnectTimer = null;
+                    connectSSE();
+                }, 2000);
+            }
         };
     }
 
+    setInactive();
     connectSSE();
+
     slider.addEventListener('input', () => {
         const value = parseFloat(slider.value);
         display.innerText = value.toFixed(2);
-        updateVolume(app,value);
+        updateVolume(app, value);
     });
 });
 
-async function updateVolume(app,value){
-    try{
+async function updateVolume(app, value) {
+    try {
         const host = window.location.hostname;
-        await fetch(`http://${host}:51000/set-volume`,{
-            method:'PUT',
-            headers:{'Content-Type':'application/json'},
-            body:JSON.stringify({app,value})
+        await fetch(`http://${host}:51000/set-volume`, {
+            method: 'PUT',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ app, value })
         });
-    }catch(err){
-        console.error('Failed to update volume:',err);
+    } catch (err) {
+        console.error('Failed to update volume:', err);
     }
 }
 </script>
+
 </body>
 </html>
