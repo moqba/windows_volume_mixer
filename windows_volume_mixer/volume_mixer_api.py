@@ -3,15 +3,14 @@ import asyncio
 from fastapi import FastAPI, Request, HTTPException
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
-from starlette.responses import StreamingResponse
+from starlette.responses import StreamingResponse, FileResponse
 
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
 from windows_volume_mixer.volume import Volume
 
 app = FastAPI()
 
-
-#app.mount("/", StaticFiles(directory="landing_page", html=True), name="static")
+app.mount("/static", StaticFiles(directory="landing_page", html=True), name="static")
 
 
 class SetVolumeData(BaseModel):
@@ -19,12 +18,22 @@ class SetVolumeData(BaseModel):
     value: float
 
 
+@app.get("/")
+def landing():
+    return FileResponse("landing_page/index.html")
+
+
 async def volume_event(app: str):
-    audio_sessions = get_session_from_keyword(keyword=app)
-    while True:
-        volume = get_volume(audio_sessions[0]).value
-        yield f"data: {volume}\n\n"
-        await asyncio.sleep(1)
+    try:
+        audio_sessions = get_session_from_keyword(keyword=app)
+        while True:
+            if not audio_sessions:
+                return
+            volume = get_volume(audio_sessions[0]).value
+            yield f"data: {volume}\n\n"
+            await asyncio.sleep(1)
+    except Exception as e:
+        raise HTTPException(status_code=404, detail=f"{e}")
 
 
 @app.get("/volume/{app}")

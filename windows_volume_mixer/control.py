@@ -27,9 +27,7 @@ def get_session_from_keyword(keyword: str) -> list[AudioSession]:
             continue
         if keyword.lower() in session.Process.name().lower():
             matching_sessions.append(session)
-    if matching_sessions:
-        return matching_sessions
-    raise ValueError(f"Session not found for keyword {keyword}")
+    return matching_sessions
 
 
 @dataclass
