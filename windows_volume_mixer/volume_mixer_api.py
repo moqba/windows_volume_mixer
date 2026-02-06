@@ -5,12 +5,13 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse, FileResponse
 
+from windows_volume_mixer.base_path import BASE_PATH
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
 from windows_volume_mixer.volume import Volume
 
 app = FastAPI()
 
-app.mount("/static", StaticFiles(directory="landing_page", html=True), name="static")
+app.mount("/static", StaticFiles(directory=BASE_PATH/"landing_page", html=True), name="static")
 
 
 class SetVolumeData(BaseModel):
