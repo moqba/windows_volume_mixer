@@ -9,57 +9,61 @@ from windows_volume_mixer.base_path import BASE_PATH
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
 from windows_volume_mixer.volume import Volume
 
-app = FastAPI()
-
-app.mount("/static", StaticFiles(directory=BASE_PATH/"landing_page", html=True), name="static")
-
 
 class SetVolumeData(BaseModel):
     app: str
     value: float
 
 
-@app.get("/")
-def landing():
-    return FileResponse("landing_page/index.html")
+def volume_mixer_api() -> FastAPI:
+    app = FastAPI()
+
+    app.mount("/static", StaticFiles(directory=BASE_PATH / "landing_page", html=True), name="static")
 
 
-async def volume_event(app: str):
-    try:
-        audio_sessions = get_session_from_keyword(keyword=app)
-        while True:
-            if not audio_sessions:
-                return
-            volume = get_volume(audio_sessions[0]).value
-            yield f"data: {volume}\n\n"
-            await asyncio.sleep(1)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"{e}")
+    @app.get("/")
+    def landing():
+        return FileResponse("landing_page/index.html")
 
 
-@app.get("/volume/{app}")
-async def stream_volume(app: str, request: Request):
-    async def stream_until_disconnect():
+    async def volume_event(app: str):
         try:
-            async for data in volume_event(app):
-                if await request.is_disconnected():
-                    break
-                yield data
-        except asyncio.CancelledError:
-            pass
-
-    try:
-        return StreamingResponse(stream_until_disconnect(), media_type="text/event-stream")
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"{e}")
+            audio_sessions = get_session_from_keyword(keyword=app)
+            while True:
+                if not audio_sessions:
+                    return
+                volume = get_volume(audio_sessions[0]).value
+                yield f"data: {volume}\n\n"
+                await asyncio.sleep(1)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"{e}")
 
 
-@app.put("/set-volume")
-async def api_set_volume(set_volume_data: SetVolumeData):
-    try:
-        volume = Volume(value=set_volume_data.value)
-        audio_sessions = get_session_from_keyword(keyword=set_volume_data.app)
-        for audio_session in audio_sessions:
-            set_volume(session=audio_session, volume=volume)
-    except Exception as e:
-        raise HTTPException(status_code=404, detail=f"{e}")
+    @app.get("/volume/{app}")
+    async def stream_volume(app: str, request: Request):
+        async def stream_until_disconnect():
+            try:
+                async for data in volume_event(app):
+                    if await request.is_disconnected():
+                        break
+                    yield data
+            except asyncio.CancelledError:
+                pass
+
+        try:
+            return StreamingResponse(stream_until_disconnect(), media_type="text/event-stream")
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"{e}")
+
+
+    @app.put("/set-volume")
+    async def api_set_volume(set_volume_data: SetVolumeData):
+        try:
+            volume = Volume(value=set_volume_data.value)
+            audio_sessions = get_session_from_keyword(keyword=set_volume_data.app)
+            for audio_session in audio_sessions:
+                set_volume(session=audio_session, volume=volume)
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"{e}")
+
+    return app
