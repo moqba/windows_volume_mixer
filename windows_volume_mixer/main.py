@@ -19,7 +19,6 @@ URL: Final[str] = f"http://127.0.0.1:{PORT}"
 ICON_PATH: Final[Path] = BASE_PATH / "core/mq_icon_mixer.ico"
 
 
-
 def run_server():
     uvicorn.run(
         volume_mixer_api,

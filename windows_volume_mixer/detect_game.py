@@ -10,30 +10,29 @@ CPU_THRESHOLD = 5  # percent CPU usage to consider “active game”
 def is_borderless_or_fullscreen(hwnd: int) -> bool:
     if not win32gui.IsWindowVisible(hwnd):
         return False
-    if win32gui.IsIconic(hwnd):  # minimized
+    is_minimized = win32gui.IsIconic(hwnd)
+    if is_minimized:
         return False
 
     style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
     ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
 
-    # Borderless window detection
-    borderless = not (style & win32con.WS_OVERLAPPEDWINDOW) and not (ex_style & win32con.WS_EX_TOOLWINDOW)
+    is_borderless = not (style & win32con.WS_OVERLAPPEDWINDOW) and not (ex_style & win32con.WS_EX_TOOLWINDOW)
 
-    # Window rect vs monitor rect
     win_rect = win32gui.GetWindowRect(hwnd)
     monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
     mon_info = win32api.GetMonitorInfo(monitor)
     mon_rect = mon_info["Monitor"]
 
-    TOL = 2  # allow small difference
-    size_match = (
-            abs(win_rect[0] - mon_rect[0]) <= TOL and
-            abs(win_rect[1] - mon_rect[1]) <= TOL and
-            abs(win_rect[2] - mon_rect[2]) <= TOL and
-            abs(win_rect[3] - mon_rect[3]) <= TOL
+    tolerance = 2
+    is_size_match = (
+            abs(win_rect[0] - mon_rect[0]) <= tolerance and
+            abs(win_rect[1] - mon_rect[1]) <= tolerance and
+            abs(win_rect[2] - mon_rect[2]) <= tolerance and
+            abs(win_rect[3] - mon_rect[3]) <= tolerance
     )
 
-    return borderless and size_match or style & win32con.WS_POPUP
+    return is_borderless and is_size_match or style & win32con.WS_POPUP
 
 
 def drop_exe(name: str) -> str:
@@ -42,7 +41,7 @@ def drop_exe(name: str) -> str:
     return name
 
 
-def get_active_game_process(cpu_threshold=CPU_THRESHOLD):
+def get_active_game_process(cpu_threshold=CPU_THRESHOLD) -> str | None:
     hwnd = win32gui.GetForegroundWindow()
     if not hwnd:
         return None

@@ -1,13 +1,15 @@
 import asyncio
+import os
 
 from fastapi import FastAPI, Request, HTTPException
-from tempfile import TemporaryDirectory
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
+from starlette.background import BackgroundTasks
 from starlette.responses import StreamingResponse, FileResponse
 
-from windows_volume_mixer.base_path import BASE_PATH
+from windows_volume_mixer.base_path import BASE_PATH, APP_DATA
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
+from windows_volume_mixer.detect_game import get_active_game_process
 from windows_volume_mixer.get_icon_path import save_icon_from_session
 from windows_volume_mixer.volume import Volume
 
@@ -54,15 +56,23 @@ def volume_mixer_api() -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"{e}")
 
+    @app.get("/game")
+    async def api_get_active_game():
+        try:
+            active_game = get_active_game_process()
+            return {"value": active_game}
+        except Exception as e:
+            raise HTTPException(status_code=404, detail=f"{e}")
+
     @app.get("/icon/{app}")
-    async def api_get_icon(app: str):
+    async def api_get_icon(app: str, background_tasks: BackgroundTasks):
         audio_sessions = get_session_from_keyword(keyword=app)
         if not audio_sessions:
             raise HTTPException(status_code=404, detail="Application not open")
-        with TemporaryDirectory() as temp_dir:
-            icon_path = save_icon_from_session(session=audio_sessions[0], output_dir=temp_dir)
-            if icon_path:
-                return FileResponse(icon_path, media_type="image/png")
+        icon_path = save_icon_from_session(session=audio_sessions[0], output_dir=APP_DATA)
+        if icon_path:
+            background_tasks.add_task(os.remove, icon_path)
+            return FileResponse(icon_path, media_type="image/png")
         raise HTTPException(status_code=404, detail=f"Couldn't fetch icon for app {app}")
 
     @app.put("/set-volume")
