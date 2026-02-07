@@ -1,5 +1,4 @@
 import multiprocessing
-import threading
 import sys
 import webbrowser
 from multiprocessing import Process

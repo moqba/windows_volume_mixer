@@ -24,7 +24,7 @@ def volume_mixer_api() -> FastAPI:
 
     @app.get("/")
     def landing():
-        return FileResponse("landing_page/index.html")
+        return FileResponse(BASE_PATH / "landing_page/index.html")
 
     async def volume_event(app: str):
         try:
