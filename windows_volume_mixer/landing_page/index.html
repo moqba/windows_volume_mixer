@@ -123,8 +123,11 @@ input[type=range]:disabled {
 
 <div class="mixer-container">
 
+    <!-- Placeholder Game channel -->
     <div class="channel inactive" id="game-container">
-        <div class="icon-container" id="game-icon"></div>
+        <div class="icon-container" id="game-icon">
+            <div class="icon-fallback">G</div>
+        </div>
         <div class="slider-wrapper">
             <input type="range" id="game-slider" min="0" max="1" step="0.01" disabled>
         </div>
@@ -162,9 +165,16 @@ input[type=range]:disabled {
 </div>
 
 <script>
-const apps = ['game', 'spotify', 'chrome', 'discord'];
+document.addEventListener('DOMContentLoaded', () => {
 
-/* ---------- ICON HANDLING ---------- */
+const staticApps = ['spotify', 'chrome', 'discord'];
+let dynamicGame = null;
+let dynamicGameChannel = document.getElementById('game-container');
+let dynamicGameSlider = document.getElementById('game-slider');
+let dynamicGameDisplay = document.getElementById('game-val');
+let dynamicEventSource = null;
+
+// ---------- ICON HANDLING ----------
 function createFallbackIcon(app) {
     const div = document.createElement('div');
     div.className = 'icon-fallback';
@@ -180,41 +190,35 @@ function blobToBase64(blob) {
     });
 }
 
-function tryLoadIcon(app) {
+async function tryLoadIcon(app, container) {
     const host = window.location.hostname;
-    const container = document.getElementById(`${app}-icon`);
     const cacheKey = `icon-cache-${app}`;
-
     const cached = localStorage.getItem(cacheKey);
+
+    container.innerHTML = '';
     if (cached) {
         const img = document.createElement('img');
         img.src = cached;
         img.className = 'icon-img';
-        container.innerHTML = '';
         container.appendChild(img);
         return;
     }
 
-    container.innerHTML = '';
     container.appendChild(createFallbackIcon(app));
 
     async function fetchIcon() {
         try {
             const res = await fetch(`http://${host}:51000/icon/${app}`);
             if (!res.ok) throw new Error();
-
             const blob = await res.blob();
             const base64 = await blobToBase64(blob);
-
             localStorage.setItem(cacheKey, base64);
 
             const img = document.createElement('img');
             img.src = base64;
             img.className = 'icon-img';
-
             container.innerHTML = '';
             container.appendChild(img);
-
             return true;
         } catch {
             return false;
@@ -227,32 +231,26 @@ function tryLoadIcon(app) {
     }, 5000);
 }
 
-/* ---------- SSE / VOLUME ---------- */
-apps.forEach(app => {
+// ---------- STATIC APPS ----------
+staticApps.forEach(app => {
     const slider = document.getElementById(`${app}-slider`);
     const display = document.getElementById(`${app}-val`);
     const channel = document.getElementById(`${app}-container`);
-
-    let eventSource = null;
-    let connected = false;
-    let reconnectTimer = null;
 
     function setInactive() {
         channel.classList.add('inactive');
         slider.disabled = true;
         display.innerText = '--';
-        connected = false;
     }
 
     function setActive() {
         channel.classList.remove('inactive');
         slider.disabled = false;
-        connected = true;
     }
 
+    let eventSource = null;
     function connectSSE() {
         if (eventSource) eventSource.close();
-
         const host = window.location.hostname;
         eventSource = new EventSource(`http://${host}:51000/volume/${app}`);
 
@@ -260,8 +258,7 @@ apps.forEach(app => {
             const value = parseFloat(event.data);
             if (isNaN(value)) return;
 
-            if (!connected) setActive();
-
+            setActive();
             if (document.activeElement !== slider) {
                 slider.value = value;
                 display.innerText = value.toFixed(2);
@@ -270,22 +267,14 @@ apps.forEach(app => {
 
         eventSource.onerror = () => {
             eventSource.close();
-            eventSource = null;
-
-            if (connected) setInactive();
-
-            if (!reconnectTimer) {
-                reconnectTimer = setTimeout(() => {
-                    reconnectTimer = null;
-                    connectSSE();
-                }, 2000);
-            }
+            setInactive();
+            setTimeout(connectSSE, 2000);
         };
     }
 
     setInactive();
     connectSSE();
-    tryLoadIcon(app);
+    tryLoadIcon(app, document.getElementById(`${app}-icon`));
 
     slider.addEventListener('input', () => {
         const value = parseFloat(slider.value);
@@ -294,6 +283,63 @@ apps.forEach(app => {
     });
 });
 
+// ---------- DYNAMIC GAME SLIDER ----------
+async function pollGame() {
+    try {
+        const host = window.location.hostname;
+        const res = await fetch(`http://${host}:51000/game`);
+        const data = await res.json();
+
+        if (!data.value) {
+            // No game running -> keep placeholder
+            dynamicGameChannel.classList.add('inactive');
+            dynamicGameSlider.disabled = true;
+            dynamicGameDisplay.innerText = '--';
+            if (dynamicEventSource) {
+                dynamicEventSource.close();
+                dynamicEventSource = null;
+            }
+            dynamicGame = null;
+            dynamicGameChannel.querySelector('.label').innerText = 'Game';
+            dynamicGameChannel.querySelector('#game-icon').innerHTML = '<div class="icon-fallback">G</div>';
+            return;
+        }
+
+        const gameName = data.value;
+        if (dynamicGame !== gameName) {
+            dynamicGame = gameName;
+
+            dynamicGameChannel.classList.remove('inactive');
+            dynamicGameSlider.disabled = false;
+            dynamicGameChannel.querySelector('.label').innerText = gameName;
+            tryLoadIcon(gameName, document.getElementById('game-icon'));
+
+            if (dynamicEventSource) dynamicEventSource.close();
+            dynamicEventSource = new EventSource(`http://${host}:51000/volume/${gameName}`);
+            dynamicEventSource.onmessage = (event) => {
+                const value = parseFloat(event.data);
+                if (isNaN(value)) return;
+                if (document.activeElement !== dynamicGameSlider) {
+                    dynamicGameSlider.value = value;
+                    dynamicGameDisplay.innerText = value.toFixed(2);
+                }
+            };
+
+            dynamicGameSlider.addEventListener('input', () => {
+                const value = parseFloat(dynamicGameSlider.value);
+                dynamicGameDisplay.innerText = value.toFixed(2);
+                updateVolume(gameName, value);
+            });
+        }
+    } catch (err) {
+        console.error('Poll game failed:', err);
+    }
+}
+
+// Poll every 2 seconds
+setInterval(pollGame, 2000);
+
+// ---------- VOLUME UPDATE ----------
 async function updateVolume(app, value) {
     try {
         const host = window.location.hostname;
@@ -306,6 +352,8 @@ async function updateVolume(app, value) {
         console.error('Failed to update volume:', err);
     }
 }
+
+});
 </script>
 
 </body>
