@@ -36,7 +36,7 @@ def is_borderless_or_fullscreen(hwnd: int) -> bool:
 
 
 def drop_exe(name: str) -> str:
-    if name.lower().endwith(".exe"):
+    if name.lower().endswith(".exe"):
         return name[:-4]
     return name
 
