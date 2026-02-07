@@ -1,12 +1,14 @@
 import asyncio
 
 from fastapi import FastAPI, Request, HTTPException
+from tempfile import TemporaryDirectory
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.responses import StreamingResponse, FileResponse
 
 from windows_volume_mixer.base_path import BASE_PATH
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
+from windows_volume_mixer.get_icon_path import save_icon_from_session
 from windows_volume_mixer.volume import Volume
 
 
@@ -20,11 +22,9 @@ def volume_mixer_api() -> FastAPI:
 
     app.mount("/static", StaticFiles(directory=BASE_PATH / "landing_page", html=True), name="static")
 
-
     @app.get("/")
     def landing():
         return FileResponse("landing_page/index.html")
-
 
     async def volume_event(app: str):
         try:
@@ -37,7 +37,6 @@ def volume_mixer_api() -> FastAPI:
                 await asyncio.sleep(1)
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"{e}")
-
 
     @app.get("/volume/{app}")
     async def stream_volume(app: str, request: Request):
@@ -55,6 +54,16 @@ def volume_mixer_api() -> FastAPI:
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"{e}")
 
+    @app.get("/icon/{app}")
+    async def api_get_icon(app: str):
+        audio_sessions = get_session_from_keyword(keyword=app)
+        if not audio_sessions:
+            raise HTTPException(status_code=404, detail="Application not open")
+        with TemporaryDirectory() as temp_dir:
+            icon_path = save_icon_from_session(session=audio_sessions[0], output_dir=temp_dir)
+            if icon_path:
+                return FileResponse(icon_path, media_type="image/png")
+        raise HTTPException(status_code=404, detail=f"Couldn't fetch icon for app {app}")
 
     @app.put("/set-volume")
     async def api_set_volume(set_volume_data: SetVolumeData):

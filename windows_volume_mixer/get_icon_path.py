@@ -11,7 +11,8 @@ ICON_WIDTH: Final[int] = 56
 ICON_HEIGHT: Final[int] = 56
 
 
-def save_icon_from_session(session: AudioSession, output_dir: Path):
+def save_icon_from_session(session: AudioSession, output_dir: Path | str) -> Path:
+    output_dir = Path(output_dir)
     exe_path = Path(session.Process.exe())
     exe_name = exe_path.stem
     large, _ = win32gui.ExtractIconEx(str(exe_path), 0)
@@ -49,3 +50,4 @@ def save_icon_from_session(session: AudioSession, output_dir: Path):
     )
 
     img.save(output_dir / f"{exe_name}.png")
+    return output_dir / f"{exe_name}.png"

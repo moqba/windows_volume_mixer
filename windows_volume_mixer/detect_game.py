@@ -1,66 +1,62 @@
-from typing import Final
-
-import win32api
-import win32con
-import win32gui
-import pefile
-from pathlib import Path
 import psutil
+import win32gui
+import win32process
+import win32con
+import win32api
 
-LAUNCHERS: Final[set[str]] = {"steam.exe", "epicgameslauncher.exe", "battle.net.exe", "riotclientservices.exe",
-                              "ubisoftconnect.exe"}
-GAME_KEYWORDS: Final[set[str]] = {"game", "engine", "unreal", "unity"}
+CPU_THRESHOLD = 5  # percent CPU usage to consider “active game”
 
 
-class DetectGame:
-    def is_game(self):
-        raise NotImplementedError()
-
-    @staticmethod
-    def looks_like_game(exe_path: str | Path):
-        exe_path = Path(exe_path)
-        pe = pefile.PE(exe_path)
-        for entry in pe.FileInfo[0]:
-            for st in entry.StringTable:
-                text = " ".join(st.entries.values()).lower()
-                if any(k in text for k in GAME_KEYWORDS):
-                    return True
+def is_borderless_or_fullscreen(hwnd: int) -> bool:
+    if not win32gui.IsWindowVisible(hwnd):
+        return False
+    if win32gui.IsIconic(hwnd):  # minimized
         return False
 
-    @staticmethod
-    def launched_by_launcher(proc: psutil.Process) -> bool:
-        try:
-            parent = proc.parent()
-            if not parent:
-                return False
-            return parent.name().lower() in LAUNCHERS
-        except psutil.Error:
-            return False
+    style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+    ex_style = win32gui.GetWindowLong(hwnd, win32con.GWL_EXSTYLE)
 
-    @staticmethod
-    def is_fullscreen_window(hwnd) -> bool:
-        if not win32gui.IsWindowVisible(hwnd):
-            return False
+    # Borderless window detection
+    borderless = not (style & win32con.WS_OVERLAPPEDWINDOW) and not (ex_style & win32con.WS_EX_TOOLWINDOW)
 
-        is_minimized_window = win32gui.IsIconic(hwnd)
-        if is_minimized_window:
-            return False
+    # Window rect vs monitor rect
+    win_rect = win32gui.GetWindowRect(hwnd)
+    monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
+    mon_info = win32api.GetMonitorInfo(monitor)
+    mon_rect = mon_info["Monitor"]
 
-        style = win32gui.GetWindowLong(hwnd, win32con.GWL_STYLE)
+    TOL = 2  # allow small difference
+    size_match = (
+            abs(win_rect[0] - mon_rect[0]) <= TOL and
+            abs(win_rect[1] - mon_rect[1]) <= TOL and
+            abs(win_rect[2] - mon_rect[2]) <= TOL and
+            abs(win_rect[3] - mon_rect[3]) <= TOL
+    )
 
-        if style & win32con.WS_OVERLAPPEDWINDOW:
-            return False
+    return borderless and size_match or style & win32con.WS_POPUP
 
-        rect = win32gui.GetWindowRect(hwnd)
-        win_w = rect[2] - rect[0]
-        win_h = rect[3] - rect[1]
 
-        monitor = win32api.MonitorFromWindow(hwnd, win32con.MONITOR_DEFAULTTONEAREST)
-        mi = win32api.GetMonitorInfo(monitor)
-        mon_rect = mi["Monitor"]
+def drop_exe(name: str) -> str:
+    if name.lower().endwith(".exe"):
+        return name[:-4]
+    return name
 
-        mon_w = mon_rect[2] - mon_rect[0]
-        mon_h = mon_rect[3] - mon_rect[1]
 
-        return abs(win_w - mon_w) <= 5 and abs(win_h - mon_h) <= 5
+def get_active_game_process(cpu_threshold=CPU_THRESHOLD):
+    hwnd = win32gui.GetForegroundWindow()
+    if not hwnd:
+        return None
 
+    if not is_borderless_or_fullscreen(hwnd):
+        return None
+
+    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+    try:
+        proc = psutil.Process(pid)
+        cpu = proc.cpu_percent(interval=0.1)
+        if cpu >= cpu_threshold:
+            return drop_exe(proc.name())
+    except psutil.Error:
+        return None
+
+    return None
