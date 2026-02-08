@@ -6,6 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel
 from starlette.background import BackgroundTasks
 from starlette.responses import StreamingResponse, FileResponse
+from starlette.templating import Jinja2Templates
 
 from windows_volume_mixer.base_path import BASE_PATH, APP_DATA
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
@@ -22,11 +23,12 @@ class SetVolumeData(BaseModel):
 def volume_mixer_api() -> FastAPI:
     app = FastAPI()
 
-    app.mount("/static", StaticFiles(directory=BASE_PATH / "landing_page", html=True), name="static")
+    app.mount("/static", StaticFiles(directory=BASE_PATH / "landing_page/static"), name="static")
+    templates = Jinja2Templates(directory=BASE_PATH / "landing_page/templates")
 
     @app.get("/")
-    def landing():
-        return FileResponse(BASE_PATH / "landing_page/index.html")
+    def index(request: Request):
+        return templates.TemplateResponse("index.html", {"request": request})
 
     async def volume_event(app: str):
         try:

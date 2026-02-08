@@ -1,0 +1,54 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <title>Volume Mixer</title>
+
+    <link rel="stylesheet" href="/static/css/mixer.css">
+</head>
+
+<body>
+
+<div class="mixer-container">
+    <div class="channel inactive" id="game-container">
+        <div class="icon-container" id="game-icon">
+            <div class="icon-fallback">G</div>
+        </div>
+        <div class="slider-wrapper">
+            <input type="range" id="game-slider" min="0" max="1" step="0.01" disabled>
+        </div>
+        <div class="value-display" id="game-val">--</div>
+        <div class="label">Game</div>
+    </div>
+
+    <div class="channel inactive" id="spotify-container">
+        <div class="icon-container" id="spotify-icon"></div>
+        <div class="slider-wrapper">
+            <input type="range" id="spotify-slider" min="0" max="1" step="0.01" disabled>
+        </div>
+        <div class="value-display" id="spotify-val">--</div>
+        <div class="label">Spotify</div>
+    </div>
+
+    <div class="channel inactive" id="chrome-container">
+        <div class="icon-container" id="chrome-icon"></div>
+        <div class="slider-wrapper">
+            <input type="range" id="chrome-slider" min="0" max="1" step="0.01" disabled>
+        </div>
+        <div class="value-display" id="chrome-val">--</div>
+        <div class="label">Chrome</div>
+    </div>
+
+    <div class="channel inactive" id="discord-container">
+        <div class="icon-container" id="discord-icon"></div>
+        <div class="slider-wrapper">
+            <input type="range" id="discord-slider" min="0" max="1" step="0.01" disabled>
+        </div>
+        <div class="value-display" id="discord-val">--</div>
+        <div class="label">Discord</div>
+    </div>
+</div>
+
+<script src="/static/js/mixer.js" defer></script>
+</body>
+</html>

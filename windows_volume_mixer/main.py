@@ -38,8 +38,15 @@ def open_mq_mixer(icon, item):
 
 
 def quit_app(icon, item):
-    icon.stop()
     server_process.terminate()
+    try:
+        server_process.join(timeout=20)
+    except TimeoutError:
+        try:
+            server_process.kill()
+        except Exception:
+            pass
+    icon.stop()
     sys.exit(0)
 
 
