@@ -9,6 +9,7 @@ from starlette.responses import StreamingResponse, FileResponse
 from starlette.templating import Jinja2Templates
 
 from windows_volume_mixer.base_path import BASE_PATH, APP_DATA
+from windows_volume_mixer.configuration_gui import fetch_config
 from windows_volume_mixer.control import get_session_from_keyword, get_volume, set_volume
 from windows_volume_mixer.detect_game import get_active_game_process
 from windows_volume_mixer.get_icon_path import save_icon_from_session
@@ -28,7 +29,15 @@ def volume_mixer_api() -> FastAPI:
 
     @app.get("/")
     def index(request: Request):
-        return templates.TemplateResponse("index.html", {"request": request})
+        config = fetch_config()
+        return templates.TemplateResponse(
+            "index.html",
+            {
+                "request": request,
+                "sliders": config.parsed_sliders,
+                "port": config.port,
+            },
+        )
 
     async def volume_event(app: str):
         try:

@@ -1,17 +1,29 @@
 document.addEventListener('DOMContentLoaded', () => {
+    const { sliders, port } = window.MQ_CONFIG;
+    const host = window.location.hostname;
 
-    const staticApps = ['spotify', 'chrome', 'discord'];
+    if (!sliders || sliders.length === 0) return;
+
+    const dynamicSliderName = sliders[0] === "game" ? "game" : null;
+    const staticApps = sliders.filter(name => name !== dynamicSliderName);
 
     let dynamicGame = null;
-    let dynamicGameChannel = document.getElementById('game-container');
-    let dynamicGameSlider = document.getElementById('game-slider');
-    let dynamicGameDisplay = document.getElementById('game-val');
     let dynamicEventSource = null;
+
+    let dynamicGameChannel = dynamicSliderName
+        ? document.getElementById(`${dynamicSliderName}-container`)
+        : null;
+    let dynamicGameSlider = dynamicSliderName
+        ? document.getElementById(`${dynamicSliderName}-slider`)
+        : null;
+    let dynamicGameDisplay = dynamicSliderName
+        ? document.getElementById(`${dynamicSliderName}-val`)
+        : null;
 
     function createFallbackIcon(app) {
         const div = document.createElement('div');
         div.className = 'icon-fallback';
-        div.innerText = app[0];
+        div.innerText = app[0].toUpperCase();
         return div;
     }
 
@@ -24,7 +36,6 @@ document.addEventListener('DOMContentLoaded', () => {
     }
 
     async function tryLoadIcon(app, container) {
-        const host = window.location.hostname;
         const cacheKey = `icon-cache-${app}`;
         const cached = localStorage.getItem(cacheKey);
 
@@ -42,7 +53,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
         async function fetchIcon() {
             try {
-                const res = await fetch(`http://${host}:51000/icon/${app}`);
+                const res = await fetch(`http://${host}:${port}/icon/${app}`);
                 if (!res.ok) throw new Error();
 
                 const blob = await res.blob();
@@ -88,15 +99,12 @@ document.addEventListener('DOMContentLoaded', () => {
         function connectSSE() {
             if (eventSource) eventSource.close();
 
-            const host = window.location.hostname;
-            eventSource = new EventSource(`http://${host}:51000/volume/${app}`);
-
-            eventSource.onmessage = (event) => {
+            eventSource = new EventSource(`http://${host}:${port}/volume/${app}`);
+            eventSource.onmessage = event => {
                 const value = parseFloat(event.data);
                 if (isNaN(value)) return;
 
                 setActive();
-
                 if (document.activeElement !== slider) {
                     slider.value = value;
                     display.innerText = value.toFixed(2);
@@ -122,9 +130,10 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 
     async function pollGame() {
+        if (!dynamicSliderName) return;
+
         try {
-            const host = window.location.hostname;
-            const res = await fetch(`http://${host}:51000/game`);
+            const res = await fetch(`http://${host}:${port}/game`);
             const data = await res.json();
 
             if (!data.value) {
@@ -158,10 +167,10 @@ document.addEventListener('DOMContentLoaded', () => {
                 if (dynamicEventSource) dynamicEventSource.close();
 
                 dynamicEventSource = new EventSource(
-                    `http://${host}:51000/volume/${gameName}`
+                    `http://${host}:${port}/volume/${gameName}`
                 );
 
-                dynamicEventSource.onmessage = (event) => {
+                dynamicEventSource.onmessage = event => {
                     const value = parseFloat(event.data);
                     if (isNaN(value)) return;
 
@@ -187,8 +196,7 @@ document.addEventListener('DOMContentLoaded', () => {
 
     async function updateVolume(app, value) {
         try {
-            const host = window.location.hostname;
-            await fetch(`http://${host}:51000/set-volume`, {
+            await fetch(`http://${host}:${port}/set-volume`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ app, value })
