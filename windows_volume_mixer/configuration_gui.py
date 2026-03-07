@@ -1,5 +1,6 @@
 import json
-from pathlib import Path
+import sys
+import winreg
 from typing import Dict
 
 from PySide6.QtWidgets import (
@@ -11,7 +12,50 @@ from PySide6.QtCore import Qt
 
 from pydantic import BaseModel, ValidationError, Field
 
-CONFIG_PATH = Path("config.json")
+from windows_volume_mixer.base_path import CONFIG_PATH
+
+_STARTUP_REG_KEY = r"Software\Microsoft\Windows\CurrentVersion\Run"
+_APP_NAME = "MqMixer"
+
+
+def _startup_exe() -> str | None:
+    """Returns the frozen exe path, or None when running from source."""
+    if getattr(sys, 'frozen', False):
+        return sys.executable
+    return None
+
+
+def is_auto_start_registered() -> bool:
+    exe = _startup_exe()
+    if not exe:
+        return False
+    try:
+        with winreg.OpenKey(winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY) as key:
+            value, _ = winreg.QueryValueEx(key, _APP_NAME)
+            return exe.lower() in value.lower()
+    except (OSError, FileNotFoundError):
+        return False
+
+
+def apply_auto_start(enabled: bool) -> None:
+    exe = _startup_exe()
+    if not exe:
+        return
+    try:
+        with winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER, _STARTUP_REG_KEY, 0, winreg.KEY_SET_VALUE
+        ) as key:
+            if enabled:
+                winreg.SetValueEx(key, _APP_NAME, 0, winreg.REG_SZ, f'"{exe}"')
+            else:
+                try:
+                    winreg.DeleteValue(key, _APP_NAME)
+                except FileNotFoundError:
+                    pass
+    except OSError:
+        pass
+
+
 
 
 class SliderConfig(BaseModel):
@@ -44,10 +88,6 @@ def fetch_config():
     except (json.JSONDecodeError, ValidationError):
         return DEFAULT_CONFIG
 
-
-# --------------------
-# GUI
-# --------------------
 
 class ConfigWindow(QWidget):
     def __init__(self):
@@ -106,10 +146,6 @@ class ConfigWindow(QWidget):
 
         self.load_config()
 
-    # --------------------
-    # UI helpers
-    # --------------------
-
     def _text_field(self, label_text):
         layout = QHBoxLayout()
         label = QLabel(label_text)
@@ -127,13 +163,10 @@ class ConfigWindow(QWidget):
         line.setFrameShadow(QFrame.Sunken)
         return line
 
-    # --------------------
-    # Config handling
-    # --------------------
-
     def load_config(self):
         config = fetch_config()
         self.apply_config_to_ui(config)
+        self.auto_start_checkbox.setChecked(is_auto_start_registered())
 
     def apply_config_to_ui(self, config: AppConfig):
         self.auto_start_checkbox.setChecked(config.auto_start)
@@ -169,5 +202,7 @@ class ConfigWindow(QWidget):
             json.dumps(config.model_dump(), indent=4),
             encoding="utf-8",
         )
+
+        apply_auto_start(config.auto_start)
 
         self.close()

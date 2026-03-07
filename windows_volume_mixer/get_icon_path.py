@@ -63,7 +63,6 @@ def hicon_to_image(hicon) -> Image:
     """
     Converts an HICON to a PIL Image at its native size, preserving transparency.
     """
-    # Get native icon size
     info = win32gui.GetIconInfo(hicon)
     bmp = win32ui.CreateBitmapFromHandle(info[3])
     width = bmp.GetInfo()["bmWidth"]

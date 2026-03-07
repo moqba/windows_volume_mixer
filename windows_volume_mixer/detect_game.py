@@ -4,7 +4,15 @@ import win32process
 import win32con
 import win32api
 
-CPU_THRESHOLD = 5  # percent CPU usage to consider “active game”
+CPU_THRESHOLD = 5  # percent CPU usage to consider "active game"
+
+GAME_CONFIRM_POLLS = 2
+GAME_GONE_POLLS = 2
+
+_candidate: str | None = None
+_candidate_streak: int = 0
+_confirmed: str | None = None
+_gone_streak: int = 0
 
 
 def is_borderless_or_fullscreen(hwnd: int) -> bool:
@@ -41,7 +49,8 @@ def drop_exe(name: str) -> str:
     return name
 
 
-def get_active_game_process(cpu_threshold=CPU_THRESHOLD) -> str | None:
+def _detect_raw(cpu_threshold: float) -> str | None:
+    """Single-shot detection with no debouncing."""
     hwnd = win32gui.GetForegroundWindow()
     if not hwnd:
         return None
@@ -59,3 +68,29 @@ def get_active_game_process(cpu_threshold=CPU_THRESHOLD) -> str | None:
         return None
 
     return None
+
+
+def get_active_game_process(cpu_threshold=CPU_THRESHOLD) -> str | None:
+    global _candidate, _candidate_streak, _confirmed, _gone_streak
+
+    raw = _detect_raw(cpu_threshold)
+
+    if raw:
+        if raw == _candidate:
+            _candidate_streak += 1
+        else:
+            _candidate = raw
+            _candidate_streak = 1
+        _gone_streak = 0
+
+        if _candidate_streak >= GAME_CONFIRM_POLLS:
+            _confirmed = raw
+    else:
+        _gone_streak += 1
+        if _gone_streak >= GAME_GONE_POLLS:
+            _candidate = None
+            _candidate_streak = 0
+            _confirmed = None
+            _gone_streak = 0
+
+    return _confirmed

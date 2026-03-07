@@ -4,26 +4,31 @@ document.addEventListener('DOMContentLoaded', () => {
 
     if (!sliders || sliders.length === 0) return;
 
-    const dynamicSliderName = sliders[0] === "game" ? "game" : null;
-    const staticApps = sliders.filter(name => name !== dynamicSliderName);
+    const BASE_URL = `http://${host}:${port}`;
+    const ICON_CACHE_PREFIX = 'icon-cache-';
+    const MAX_ICON_RETRIES = 5;
+    const ICON_RETRY_MS = 2000;
+    const VOLUME_DEBOUNCE_MS = 80;
+    const GAME_POLL_MS = 2000;
+    const SSE_RECONNECT_MS = 2000;
 
-    let dynamicGame = null;
-    let dynamicEventSource = null;
+    const dynamicSliderName = sliders.find(name => name === 'game') ?? null;
+    const staticApps = sliders.filter(name => name !== 'game');
 
-    let dynamicGameChannel = dynamicSliderName
-        ? document.getElementById(`${dynamicSliderName}-container`)
-        : null;
-    let dynamicGameSlider = dynamicSliderName
-        ? document.getElementById(`${dynamicSliderName}-slider`)
-        : null;
-    let dynamicGameDisplay = dynamicSliderName
-        ? document.getElementById(`${dynamicSliderName}-val`)
-        : null;
+    // --- Utilities ---
+
+    function debounce(fn, delay) {
+        let timer;
+        return (...args) => {
+            clearTimeout(timer);
+            timer = setTimeout(() => fn(...args), delay);
+        };
+    }
 
     function createFallbackIcon(app) {
         const div = document.createElement('div');
         div.className = 'icon-fallback';
-        div.innerText = app[0].toUpperCase();
+        div.textContent = app[0].toUpperCase();
         return div;
     }
 
@@ -35,8 +40,10 @@ document.addEventListener('DOMContentLoaded', () => {
         });
     }
 
+    // --- Icon loading ---
+
     async function tryLoadIcon(app, container) {
-        const cacheKey = `icon-cache-${app}`;
+        const cacheKey = `${ICON_CACHE_PREFIX}${app}`;
         const cached = localStorage.getItem(cacheKey);
 
         container.innerHTML = '';
@@ -51,152 +58,56 @@ document.addEventListener('DOMContentLoaded', () => {
 
         container.appendChild(createFallbackIcon(app));
 
-        async function fetchIcon() {
-            try {
-                const res = await fetch(`http://${host}:${port}/icon/${app}`);
-                if (!res.ok) throw new Error();
+        let attempts = 0;
 
+        async function attempt() {
+            if (attempts >= MAX_ICON_RETRIES) return;
+            attempts++;
+            try {
+                const res = await fetch(`${BASE_URL}/icon/${app}`);
+                if (!res.ok) throw new Error();
                 const blob = await res.blob();
                 const base64 = await blobToBase64(blob);
-                localStorage.setItem(cacheKey, base64);
-
+                try {
+                    localStorage.setItem(cacheKey, base64);
+                } catch {
+                    // localStorage full — skip caching
+                }
                 const img = document.createElement('img');
                 img.src = base64;
                 img.className = 'icon-img';
-
                 container.innerHTML = '';
                 container.appendChild(img);
-                return true;
             } catch {
-                return false;
+                if (attempts < MAX_ICON_RETRIES) {
+                    setTimeout(attempt, ICON_RETRY_MS);
+                }
             }
         }
 
-        const interval = setInterval(async () => {
-            const success = await fetchIcon();
-            if (success) clearInterval(interval);
-        }, 2000);
+        attempt(); // try immediately, retry on failure
     }
 
-    staticApps.forEach(app => {
-        const slider = document.getElementById(`${app}-slider`);
-        const display = document.getElementById(`${app}-val`);
-        const channel = document.getElementById(`${app}-container`);
+    // --- SSE helper ---
 
-        function setInactive() {
-            channel.classList.add('inactive');
-            slider.disabled = true;
-            display.innerText = '--';
-        }
-
-        function setActive() {
-            channel.classList.remove('inactive');
-            slider.disabled = false;
-        }
-
-        let eventSource = null;
-
-        function connectSSE() {
-            if (eventSource) eventSource.close();
-
-            eventSource = new EventSource(`http://${host}:${port}/volume/${app}`);
-            eventSource.onmessage = event => {
-                const value = parseFloat(event.data);
-                if (isNaN(value)) return;
-
-                setActive();
-                if (document.activeElement !== slider) {
-                    slider.value = value;
-                    display.innerText = value.toFixed(2);
-                }
-            };
-
-            eventSource.onerror = () => {
-                eventSource.close();
-                setInactive();
-                setTimeout(connectSSE, 2000);
-            };
-        }
-
-        setInactive();
-        connectSSE();
-        tryLoadIcon(app, document.getElementById(`${app}-icon`));
-
-        slider.addEventListener('input', () => {
-            const value = parseFloat(slider.value);
-            display.innerText = value.toFixed(2);
-            updateVolume(app, value);
-        });
-    });
-
-    async function pollGame() {
-        if (!dynamicSliderName) return;
-
-        try {
-            const res = await fetch(`http://${host}:${port}/game`);
-            const data = await res.json();
-
-            if (!data.value) {
-                dynamicGameChannel.classList.add('inactive');
-                dynamicGameSlider.disabled = true;
-                dynamicGameDisplay.innerText = '--';
-
-                if (dynamicEventSource) {
-                    dynamicEventSource.close();
-                    dynamicEventSource = null;
-                }
-
-                dynamicGame = null;
-                dynamicGameChannel.querySelector('.label').innerText = 'Game';
-                dynamicGameChannel.querySelector('#game-icon').innerHTML =
-                    '<div class="icon-fallback">G</div>';
-                return;
-            }
-
-            const gameName = data.value;
-
-            if (dynamicGame !== gameName) {
-                dynamicGame = gameName;
-
-                dynamicGameChannel.classList.remove('inactive');
-                dynamicGameSlider.disabled = false;
-                dynamicGameChannel.querySelector('.label').innerText = gameName;
-
-                tryLoadIcon(gameName, document.getElementById('game-icon'));
-
-                if (dynamicEventSource) dynamicEventSource.close();
-
-                dynamicEventSource = new EventSource(
-                    `http://${host}:${port}/volume/${gameName}`
-                );
-
-                dynamicEventSource.onmessage = event => {
-                    const value = parseFloat(event.data);
-                    if (isNaN(value)) return;
-
-                    if (document.activeElement !== dynamicGameSlider) {
-                        dynamicGameSlider.value = value;
-                        dynamicGameDisplay.innerText = value.toFixed(2);
-                    }
-                };
-
-                dynamicGameSlider.addEventListener('input', () => {
-                    const value = parseFloat(dynamicGameSlider.value);
-                    dynamicGameDisplay.innerText = value.toFixed(2);
-                    updateVolume(gameName, value);
-                });
-            }
-
-        } catch (err) {
-            console.error('Poll game failed:', err);
-        }
+    function openVolumeSSE(app, { onValue, onDisconnect }) {
+        const es = new EventSource(`${BASE_URL}/volume/${app}`);
+        es.onmessage = event => {
+            const value = parseFloat(event.data);
+            if (!isNaN(value)) onValue(value);
+        };
+        es.onerror = () => {
+            es.close();
+            onDisconnect();
+        };
+        return es;
     }
 
-    setInterval(pollGame, 2000);
+    // --- Volume update ---
 
     async function updateVolume(app, value) {
         try {
-            await fetch(`http://${host}:${port}/set-volume`, {
+            await fetch(`${BASE_URL}/set-volume`, {
                 method: 'PUT',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify({ app, value })
@@ -206,4 +117,129 @@ document.addEventListener('DOMContentLoaded', () => {
         }
     }
 
+    // --- Static channels ---
+
+    staticApps.forEach(app => {
+        const slider = document.getElementById(`${app}-slider`);
+        const display = document.getElementById(`${app}-val`);
+        const channel = document.getElementById(`${app}-container`);
+        const iconContainer = document.getElementById(`${app}-icon`);
+
+        const debouncedUpdate = debounce(updateVolume, VOLUME_DEBOUNCE_MS);
+
+        function setInactive() {
+            channel.classList.add('inactive');
+            slider.disabled = true;
+            display.textContent = '--';
+        }
+
+        function setActive() {
+            channel.classList.remove('inactive');
+            slider.disabled = false;
+        }
+
+        function connect() {
+            openVolumeSSE(app, {
+                onValue(value) {
+                    setActive();
+                    if (document.activeElement !== slider) {
+                        slider.value = value;
+                        display.textContent = value.toFixed(2);
+                    }
+                },
+                onDisconnect() {
+                    setInactive();
+                    setTimeout(connect, SSE_RECONNECT_MS);
+                }
+            });
+        }
+
+        setInactive();
+        connect();
+        tryLoadIcon(app, iconContainer);
+
+        slider.addEventListener('input', () => {
+            const value = parseFloat(slider.value);
+            display.textContent = value.toFixed(2);
+            debouncedUpdate(app, value);
+        });
+    });
+
+    // --- Dynamic game channel ---
+
+    if (!dynamicSliderName) return;
+
+    const gameChannel = document.getElementById('game-container');
+    const gameSlider = document.getElementById('game-slider');
+    const gameDisplay = document.getElementById('game-val');
+    const gameIcon = document.getElementById('game-icon');
+    const gameLabel = gameChannel.querySelector('.label');
+
+    let currentGame = null;
+    let gameEventSource = null;
+    let gameSliderAbort = null;
+
+    const debouncedGameUpdate = debounce(updateVolume, VOLUME_DEBOUNCE_MS);
+
+    function resetGameChannel() {
+        gameChannel.classList.add('inactive');
+        gameSlider.disabled = true;
+        gameDisplay.textContent = '--';
+        gameLabel.textContent = 'Game';
+        gameIcon.innerHTML = '';
+        gameIcon.appendChild(createFallbackIcon('game'));
+
+        if (gameEventSource) {
+            gameEventSource.close();
+            gameEventSource = null;
+        }
+
+        currentGame = null;
+    }
+
+    async function pollGame() {
+        try {
+            const res = await fetch(`${BASE_URL}/game`);
+            if (!res.ok) { resetGameChannel(); return; }
+
+            const data = await res.json();
+            if (!data.value) { resetGameChannel(); return; }
+
+            const gameName = data.value;
+            if (currentGame === gameName) return;
+
+            currentGame = gameName;
+            gameChannel.classList.remove('inactive');
+            gameSlider.disabled = false;
+            gameLabel.textContent = gameName;
+
+            tryLoadIcon(gameName, gameIcon);
+
+            if (gameEventSource) gameEventSource.close();
+            gameEventSource = openVolumeSSE(gameName, {
+                onValue(value) {
+                    if (document.activeElement !== gameSlider) {
+                        gameSlider.value = value;
+                        gameDisplay.textContent = value.toFixed(2);
+                    }
+                },
+                onDisconnect() {} // pollGame drives reconnect logic
+            });
+
+            // Replace previous input listener cleanly
+            if (gameSliderAbort) gameSliderAbort.abort();
+            gameSliderAbort = new AbortController();
+            gameSlider.addEventListener('input', () => {
+                const value = parseFloat(gameSlider.value);
+                gameDisplay.textContent = value.toFixed(2);
+                debouncedGameUpdate(gameName, value);
+            }, { signal: gameSliderAbort.signal });
+
+        } catch (err) {
+            console.error('Poll game failed:', err);
+        }
+    }
+
+    resetGameChannel();
+    setInterval(pollGame, GAME_POLL_MS);
 });

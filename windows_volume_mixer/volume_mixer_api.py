@@ -62,8 +62,13 @@ def volume_mixer_api() -> FastAPI:
             except asyncio.CancelledError:
                 pass
 
+        headers = {
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+        }
         try:
-            return StreamingResponse(stream_until_disconnect(), media_type="text/event-stream")
+            return StreamingResponse(stream_until_disconnect(), media_type="text/event-stream", headers=headers)
         except Exception as e:
             raise HTTPException(status_code=404, detail=f"{e}")
 
