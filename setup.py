@@ -7,7 +7,7 @@ from setuptools import find_packages
 setup(
     name='windows_volume_mixer',
     description='Controls windows applications volume',
-    version='0.0.1',
+    version='0.0.2',
     author="Mohcine Qbaich",
     author_email='randeomcom@gmail.com',
     url='https://github.com/moqba/windows_volume_mixer',

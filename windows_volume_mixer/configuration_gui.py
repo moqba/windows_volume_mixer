@@ -198,10 +198,14 @@ class ConfigWindow(QWidget):
             QMessageBox.critical(self, "Invalid configuration", str(e))
             return
 
-        CONFIG_PATH.write_text(
-            json.dumps(config.model_dump(), indent=4),
-            encoding="utf-8",
-        )
+        try:
+            CONFIG_PATH.write_text(
+                json.dumps(config.model_dump(), indent=4),
+                encoding="utf-8",
+            )
+        except OSError as e:
+            QMessageBox.critical(self, "Save failed", str(e))
+            return
 
         apply_auto_start(config.auto_start)
 

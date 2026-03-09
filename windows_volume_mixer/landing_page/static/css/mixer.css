@@ -1,6 +1,10 @@
 html, body {
-    height: 100%;
+    display: flex
+    justify-content: center;
+    overflow: hidden;
+    height: 100vh;
     margin: 0;
+    align-items: center;
     font-family: sans-serif;
     background: #121212;
     color: white;
@@ -14,10 +18,11 @@ body {
 
 .mixer-container {
     display: flex;
-    gap: 5vw;
-    width: 90vw;
-    height: 95vh;
+    gap: 3vw;
+    width: 95vw;
+    height: 90vh;
     align-items: stretch;
+    justify-content: center;
 }
 
 .channel {
@@ -76,16 +81,17 @@ body {
 }
 
 .slider-wrapper {
-    flex-grow: 1;
+    flex: 1;
     display: flex;
     align-items: stretch;
+    min-height: 0;
 }
 
 input[type=range] {
     writing-mode: vertical-lr;
     direction: rtl;
-    width: 12px;
-    height: 100%;
+    width: 20px;
+    height: 95%;
     touch-action: none;
 }
 
